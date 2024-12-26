@@ -7,10 +7,7 @@ import com.dabomstew.pkrandom.Settings;
 import com.dabomstew.pkrandom.romhandlers.*;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.ResourceBundle;
+import java.util.*;
 
 public class CliRandomizer {
 
@@ -18,7 +15,7 @@ public class CliRandomizer {
 
     private static boolean performDirectRandomization(String settingsFilePath, String sourceRomFilePath,
                                                       String destinationRomFilePath, boolean saveAsDirectory,
-                                                      String updateFilePath, boolean saveLog) {
+                                                      String updateFilePath, boolean saveLog, Optional<Long> seed) {
         // borrowed directly from NewRandomizerGUI()
         RomHandler.Factory[] checkHandlers = new RomHandler.Factory[] {
                 new Gen1RomHandler.Factory(),
@@ -93,7 +90,12 @@ public class CliRandomizer {
                     String filename = fh.getAbsolutePath();
 
                     Randomizer randomizer = new Randomizer(settings, romHandler, bundle, saveAsDirectory);
-                    randomizer.randomize(filename, verboseLog);
+                    if (seed.isPresent()) {
+                        randomizer.randomize(filename, verboseLog, seed.get());
+                    } else {
+                        randomizer.randomize(filename, verboseLog);
+                    }
+
                     verboseLog.close();
                     byte[] out = baos.toByteArray();
                     if (saveLog) {
@@ -138,8 +140,8 @@ public class CliRandomizer {
         boolean saveAsDirectory = false;
         String updateFilePath = null;
         boolean saveLog = false;
-
-        List<String> allowedFlags = Arrays.asList("-i", "-o", "-s", "-d", "-u", "-l", "--help");
+        String seed = null;
+        List<String> allowedFlags = Arrays.asList("-i", "-o", "-s", "-d", "-u", "-l", "--help", "--seed");
         for (int i = 0; i < args.length; i++) {
             if (allowedFlags.contains(args[i])) {
                 switch(args[i]) {
@@ -164,6 +166,9 @@ public class CliRandomizer {
                     case "--help":
                         printUsage();
                         return 0;
+                    case "--seed":
+                        seed = args[i+1];
+                        break;
                     default:
                         break;
                 }
@@ -197,6 +202,15 @@ public class CliRandomizer {
             CliRandomizer.printUsage();
             return 1;
         }
+        Optional<Long> parsed_seed = Optional.empty();
+        if (seed != null) {
+            try {
+                parsed_seed = Optional.of(Long.parseLong(seed));
+            } catch (NumberFormatException e) {
+                printError("Could not parse seed `" + seed + "`. Seed must be all numbers.");
+                return 1;
+            }
+        }
 
         boolean processResult = CliRandomizer.performDirectRandomization(
                 settingsFilePath,
@@ -204,7 +218,8 @@ public class CliRandomizer {
                 outputRomFilePath,
                 saveAsDirectory,
                 updateFilePath,
-                saveLog
+                saveLog,
+                parsed_seed
         );
         if (!processResult) {
             printError("Randomization failed");
@@ -224,7 +239,7 @@ public class CliRandomizer {
 
     private static void printUsage() {
         System.err.println("Usage: java [-Xmx4096M] -jar PokeRandoZX.jar cli -s <path to settings file> " +
-                "-i <path to source ROM> -o <path for new ROM> [-d][-u <path to 3DS game update>][-l]");
+                "-i <path to source ROM> -o <path for new ROM> [-d][-u <path to 3DS game update>][-l] [--seed] <randomizer seed>");
         System.err.println("-d: Save 3DS game as directory (LayeredFS)");
     }
 }
